@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>这顿吃什么 - 拯救选择困难症</title>
+    <style>
+        :root {
+            --bg-color: #fff5f5;
+            --card-bg: #ffffff;
+            --primary-color: #ff6b6b;
+            --secondary-color: #feca57;
+            --text-color: #2d3436;
+            --sub-text: #666;
+            --border-color: #eee;
+            --btn-hover: #fff5f5;
+        }
+
+        /* 深夜模式配色 */
+        body.dark-mode {
+            --bg-color: #1a1a2e;
+            --card-bg: #16213e;
+            --primary-color: #e94560;
+            --secondary-color: #0f3460;
+            --text-color: #e9ecef;
+            --sub-text: #95a5a6;
+            --border-color: #444;
+            --btn-hover: #1f4068;
+        }
+
+        body {
+            font-family: 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            transition: all 0.5s ease;
+        }
+
+        #app {
+            background: var(--card-bg);
+            padding: 2rem;
+            border-radius: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+            width: 90%;
+            max-width: 450px;
+            text-align: center;
+            transition: all 0.5s ease;
+        }
+
+        h1 { color: var(--primary-color); margin-bottom: 1rem; }
+
+        .progress-bar {
+            height: 6px;
+            background: var(--border-color);
+            border-radius: 3px;
+            margin-bottom: 2rem;
+            overflow: hidden;
+        }
+
+        #progress {
+            height: 100%;
+            background: var(--primary-color);
+            width: 0%;
+            transition: width 0.3s;
+        }
+
+        .question-box h2 { font-size: 1.2rem; margin-bottom: 1.5rem; min-height: 3em; line-height: 1.4; }
+
+        .options-container {
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
+        }
+
+        button {
+            padding: 16px;
+            border: 2px solid var(--border-color);
+            border-radius: 12px;
+            background: var(--card-bg);
+            color: var(--text-color);
+            cursor: pointer;
+            font-size: 1rem;
+            transition: all 0.2s;
+            font-weight: 500;
+        }
+
+        button:hover {
+            border-color: var(--primary-color);
+            background: var(--btn-hover);
+            transform: translateY(-2px);
+        }
+
+        #result-container { display: none; }
+        .food-name {
+            font-size: 2.2rem;
+            color: var(--primary-color);
+            margin: 1.5rem 0 0.5rem 0;
+            display: block;
+            font-weight: bold;
+        }
+        
+        #food-desc {
+            color: var(--sub-text);
+            font-style: italic;
+            margin-bottom: 2rem;
+            line-height: 1.6;
+        }
+
+        .restart-btn {
+            background: var(--primary-color);
+            color: white;
+            border: none;
+            width: 100%;
+        }
+
+        .shake-hint {
+            margin-top: 20px;
+            font-size: 0.85rem;
+            color: var(--sub-text);
+            opacity: 0.8;
+        }
+
+        /* 摇一摇时的动画提示 */
+        @keyframes shake-icon {
+            0% { transform: rotate(0); }
+            25% { transform: rotate(10deg); }
+            50% { transform: rotate(-10deg); }
+            75% { transform: rotate(10deg); }
+            100% { transform: rotate(0); }
+        }
+        .shake-active { animation: shake-icon 0.5s infinite; }
+    </style>
+</head>
+<body>
+
+<div id="app">
+    <div id="game-zone">
+        <h1>这顿吃什么</h1>
+        <div class="progress-bar"><div id="progress"></div></div>
+        
+        <div class="question-box">
+            <h2 id="q-text">正在侦测你的胃部求救信号...</h2>
+            <div class="options-container" id="options">
+                <button onclick="startGame()">开始灵魂抉择</button>
+            </div>
+        </div>
+        <p class="shake-hint" id="shake-text">📱 手机端可直接摇一摇听天由命</p>
+    </div>
+
+    <div id="result-container">
+        <h1>最终决议</h1>
+        <p>经过大数据（和直觉）分析：</p>
+        <span class="food-name" id="food-result"></span>
+        <p id="food-desc"></p>
+        <button class="restart-btn" onclick="location.reload()">再测一次</button>
+    </div>
+</div>
+
+<script>
+    // 54种食物库
+    const foods = [
+        { name: "兰州拉面", tags: ["noodle", "budget", "fast", "hot", "lunch"], desc: "快准狠，是对面食最起码的尊重。" },
+        { name: "麻辣烫", tags: ["spicy", "budget", "hot", "solo", "night"], desc: "一个人的火锅狂欢。" },
+        { name: "减脂沙拉", tags: ["healthy", "mild", "cold", "light", "tea"], desc: "草虽然不好吃，但没什么罪恶感呀。" },
+        { name: "四川火锅", tags: ["spicy", "party", "hot", "slow", "heavy", "night"], desc: "大锅可涮万物。" },
+        { name: "美式汉堡", tags: ["carb", "fast", "heavy", "other", "lunch"], desc: "热量即是正义！" },
+        { name: "螺蛳粉", tags: ["spicy", "solo", "heavy", "budget", "night"], desc: "闻着臭吃着香。别在密闭空间嗦。" },
+        { name: "寿司拼盘", tags: ["cold", "fancy", "mild", "popular", "tea"], desc: "怎么不是日式mini盖浇饭。" },
+        { name: "潮汕牛肉火锅", tags: ["healthy", "hot", "party", "mild", "slow"], desc: "清汤里翻滚的，是食材的原型。" },
+        { name: "便利店饭团", tags: ["budget", "fast", "light", "solo", "breakfast"], desc: "最快的能量补给站。" },
+        { name: "韩式炸鸡", tags: ["carb", "heavy", "party", "other", "night"], desc: "酥脆的外皮下，是馋虫的避难所。" },
+        { name: "盖浇饭", tags: ["rice", "mild", "popular", "budget", "lunch"], desc: "1+1＞2。" },
+        { name: "酸菜鱼", tags: ["middle-spicy", "rice", "couple", "popular", "lunch"], desc: "酸爽开胃，鱼你在一起。" },
+        { name: "广式茶点", tags: ["mild", "slow", "fancy", "light", "breakfast"], desc: "饮茶先啦。" },
+        { name: "麻辣香锅", tags: ["spicy", "heavy", "rice", "mid", "night"], desc: "米饭杀手，懂的都懂。" },
+        { name: "意大利面", tags: ["other", "mid", "mild", "couple", "lunch"], desc: "Eat it up~ Eat it eat it up~" },
+        { name: "路边炭烤串", tags: ["party", "heavy", "hot", "mid", "night"], desc: "喜欢一些没有边界感、半夜三更自动刷新在各大外卖平台的美味东西。" },
+        { name: "瓦罐汤", tags: ["healthy", "hot", "mild", "budget", "lunch"], desc: "呵护你的肠胃。" },
+        { name: "海南鸡饭", tags: ["rice", "mild", "mid", "healthy", "lunch"], desc: "就好这口鸡油。" },
+        { name: "煎饼果子", tags: ["budget", "fast", "carb", "other", "breakfast"], desc: "加两个蛋，是生活的最高礼遇。" },
+        { name: "章鱼小丸子", tags: ["light", "other", "budget", "cold", "tea"], desc: "我就随便吃点，真的不饿。" },
+        { name: "冷面/凉皮", tags: ["cold", "budget", "middle-spicy", "fast", "tea"], desc: "给燥热的灵魂降降温。" },
+        { name: "重庆小面", tags: ["noodle", "spicy", "fast", "budget", "breakfast"], desc: "麻辣鲜香，一碗入魂。" },
+        { name: "韩式部队锅", tags: ["hot", "middle-spicy", "couple", "carb", "night"], desc: "碳水与芝士的跨国联姻。" },
+        { name: "铁板炒饭", tags: ["rice", "heavy", "fast", "budget", "night"], desc: "浸透了锅气的一碗碳水。" },
+        { name: "包子/花卷/老面馒头", tags: ["budget", "fast", "hot", "solo", "breakfast"], desc: "儿时听了无数回的吆喝。" },
+        { name: "烧腊饭", tags: ["rice", "mid", "popular", "normal", "lunch"], desc: "咸甜适口，油光锃亮的诱惑。" },
+        { name: "新疆炒米粉", tags: ["spicy", "heavy", "noodle", "fast", "night"], desc: "欸，这辣度你受得了吗？" },
+        { name: "波奇饭", tags: ["healthy", "cold", "rice", "light", "lunch"], desc: "假装在夏威夷冲浪的清爽感。" },
+        { name: "越南河粉", tags: ["mild", "hot", "healthy", "noodle", "lunch"], desc: "一碗清汤下点粉，治愈所有不开心。" },
+        { name: "炸酱面", tags: ["noodle", "mid", "heavy", "popular"], desc: "拌的是酱，吃的是讲究。" },
+        { name: "武汉热干面", tags: ["noodle", "budget", "fast", "breakfast"], desc: "过早榜榜首，芝麻酱与碱面的极致缠绵。" },
+        { name: "塔可", tags: ["other", "light", "cold", "tea"], desc: "卷起异域风情并大口吞下。" },
+        { name: "小龙虾", tags: ["spicy", "party", "heavy", "night"], desc: "剥开的是壳，丢掉的是压力。" },
+        { name: "东北烧烤", tags: ["party", "heavy", "hot", "night"], desc: "给生活整点烟火气，没啥过不去的。" },
+        { name: "咖喱蛋包饭", tags: ["rice", "mild", "mid", "popular"], desc: "被浓郁咖喱包裹的温柔梦想。" },
+        { name: "肉夹馍", tags: ["other", "budget", "fast", "lunch"], desc: "肉要肥瘦相间，饼要酥脆掉渣。" },
+        { name: "土豆粉", tags: ["noodle", "hot", "mid", "popular"], desc: "晶莹弹牙，吸溜一下滑进胃里。" },
+        { name: "脆皮五花肉", tags: ["heavy", "other", "fast", "night"], desc: "咔哧一声，烦恼全消。" },
+        { name: "过桥米线", tags: ["noodle", "hot", "fancy", "slow"], desc: "汤要滚烫，心要淡定。" },
+        { name: "鸭血粉丝汤", tags: ["mild", "hot", "light", "popular"], desc: "清鲜淡雅，这一口就很南京。" },
+        { name: "串串香", tags: ["spicy", "party", "hot", "night"], desc: "数签子的快乐，你不懂。" },
+        { name: "牛排", tags: ["fancy", "heavy", "couple", "other"], desc: "您要几分熟？" },
+        { name: "煎饺/锅贴", tags: ["budget", "fast", "rice", "breakfast"], desc: "底要焦黄，汁要鲜甜。" },
+        { name: "窑鸡", tags: ["heavy", "party", "hot", "popular"], desc: "原汁原味，撕着吃才够爽。" },
+        { name: "贝果", tags: ["healthy", "light", "cold", "tea"], desc: "面包的百面千相。" },
+        { name: "麻辣拌", tags: ["spicy", "budget", "other", "night"], desc: "没汤也快乐，酸甜麻辣大乱斗。" },
+        { name: "温州瘦肉丸", tags: ["light", "hot", "budget", "tea"], desc: "清汤里的弹性颗粒感。" },
+        { name: "顺德打边炉", tags: ["mild", "healthy", "party", "fancy"], desc: "清水出芙蓉，鲜味自天成。" },
+        { name: "猪脚饭", tags: ["rice", "heavy", "budget", "fast"], desc: "卤香四溢，一拽就脱骨。" },
+        { name: "小笼包", tags: ["mild", "hot", "popular", "breakfast"], desc: "先开窗，后喝汤。" },
+        { name: "披萨", tags: ["other", "party", "carb", "popular"], desc: "芝士拉丝的瞬间，灵魂也升华了。" },
+        { name: "冬阴功汤", tags: ["spicy", "hot", "other", "lunch"], desc: "舌尖上的东南亚派对。" },
+        { name: "沙威玛", tags: ["other", "fast", "mid", "lunch"], desc: "知道大家都是当了店主来的。" },
+        { name: "扬州炒饭", tags: ["rice", "mild", "popular", "fast"], desc: "每一粒米都要裹上蛋液的辉煌。" }
+    ];
+
+    const questions = [
+        { q: "现在你的肚子饿到了哪个级别？", options: [
+            { t: "填个缝就行", tags: ["light"] },
+            { t: "正常干饭", tags: ["normal"] },
+            { t: "饿到能吞下一头牛", tags: ["heavy"] }
+        ]},
+        { q: "观察一下你现在的状态：", options: [
+            { t: "精神紧绷，压力山大", tags: ["spicy", "heavy"] },
+            { t: "岁月静好，心平气和", tags: ["mild"] },
+            { t: "没精打采，急需能量", tags: ["carb", "fast"] }
+        ]},
+        { q: "此时此刻，你的食道渴望怎样的洗礼？", options: [
+            { t: "热腾腾的抚慰", tags: ["hot"] },
+            { t: "凉飕飕的刺激", tags: ["cold"] },
+            { t: "常温就好", tags: ["room"] }
+        ]},
+        { q: "摸摸口袋，这顿饭的预算是？", options: [
+            { t: "穷鬼套餐", tags: ["budget"] },
+            { t: "上这么久的班/学，真是辛苦我了，犒劳下自己", tags: ["mid"] },
+            { t: "这一顿将会很疯狂", tags: ["fancy"] }
+        ]},
+        { q: "想到“面条”这两个字，你的第一反应是：", options: [
+            { t: "既然提了就吃它吧", tags: ["noodle"] },
+            { t: "哒咩，今天想吃饭", tags: ["rice"] },
+            { t: "还有别的选项吗？", tags: ["other"] }
+        ]},
+        { q: "你的肠胃现在的“战斗力”如何？", options: [
+            { t: "钢铁之躯", tags: ["spicy"] },
+            { t: "弱不禁风", tags: ["mild", "healthy"] },
+            { t: "左右摇摆", tags: ["middle-spicy"] }
+        ]},
+        { q: "这顿饭你打算花多长时间解决？", options: [
+            { t: "5分钟战斗结束", tags: ["fast"] },
+            { t: "正常的就餐时光", tags: ["normal-time"] },
+            { t: "可以吃到天荒地老", tags: ["slow"] }
+        ]},
+        { q: "看一眼窗外，现在的天气让你觉得：", options: [
+            { t: "满头大汗才爽", tags: ["hot", "spicy"] },
+            { t: "清淡不油腻最好", tags: ["mild", "healthy"] },
+            { t: "碳水炸弹万岁", tags: ["carb"] }
+        ]},
+        { q: "你的社交状态是？", options: [
+            { t: "孤狼独食", tags: ["solo"] },
+            { t: "两人约会", tags: ["couple"] },
+            { t: "聚众分赃", tags: ["party"] }
+        ]},
+        { q: "最后，你最怕这顿饭：", options: [
+            { t: "太贵", tags: ["budget"] },
+            { t: "不好吃", tags: ["popular"] },
+            { t: "催人体重上升", tags: ["healthy"] }
+        ]}
+    ];
+
+    let currentStep = 0;
+    let userTags = {};
+    let lastUpdate = 0;
+    let lastX = 0, lastY = 0, lastZ = 0;
+
+    // 深夜模式自动切换
+    function applyNightMode() {
+        const hour = new Date().getHours();
+        if (hour >= 21 || hour < 5) {
+            document.body.classList.add('dark-mode');
+            document.getElementById('q-text').innerText = "夜深了，人要化身饿鬼了。";
+        }
+    }
+
+    // 时间标签获取
+    function getTimeTag() {
+        const hour = new Date().getHours();
+        if (hour >= 5 && hour < 10) return "breakfast";
+        if (hour >= 11 && hour < 14) return "lunch";
+        if (hour >= 14 && hour < 17) return "tea";
+        if (hour >= 20 || hour < 4) return "night";
+        return "normal";
+    }
+
+    function startGame() {
+        // 请求iOS震动/感应权限（如果需要）
+        if (typeof DeviceMotionEvent !== 'undefined' && typeof DeviceMotionEvent.requestPermission === 'function') {
+            DeviceMotionEvent.requestPermission();
+        }
+        showQuestion();
+        initShake();
+    }
+
+    function showQuestion() {
+        if (currentStep >= questions.length) {
+            showResult();
+            return;
+        }
+
+        const q = questions[currentStep];
+        document.getElementById('q-text').innerText = q.q;
+        const optionsDiv = document.getElementById('options');
+        optionsDiv.innerHTML = '';
+
+        q.options.forEach(opt => {
+            const btn = document.createElement('button');
+            btn.innerText = opt.t;
+            btn.onclick = () => handleAnswer(opt.tags);
+            optionsDiv.appendChild(btn);
+        });
+
+        document.getElementById('progress').style.width = (currentStep / questions.length * 100) + '%';
+    }
+
+    function handleAnswer(tags) {
+        tags.forEach(t => { userTags[t] = (userTags[t] || 0) + 1; });
+        currentStep++;
+        showQuestion();
+    }
+
+   function showResult(isShake = false) {
+        window.removeEventListener('devicemotion', deviceMotionHandler);
+        document.getElementById('game-zone').style.display = 'none';
+        document.getElementById('result-container').style.display = 'block';
+
+        const timeTag = getTimeTag();
+        let results = [];
+        let maxScore = -1;
+
+        foods.forEach(food => {
+            // 如果是摇一摇，给一个 0-10 的随机基础分；答题则基础分为 0
+            let score = isShake ? (Math.random() * 10) : 0;
+            
+            // 答题标签分
+            food.tags.forEach(tag => { if (userTags[tag]) score += userTags[tag]; });
+            
+            // 时间权重：答题权重为3，摇一摇权重降为1，增加随机性
+            if (food.tags.includes(timeTag)) score += isShake ? 1 : 3;
+
+            if (score > maxScore) {
+                maxScore = score;
+                results = [food];
+            } else if (score === maxScore) {
+                results.push(food);
+            }
+        });
+
+        const finalFood = results[Math.floor(Math.random() * results.length)];
+        const searchUrl = `https://m.dianping.com/shoplist/ms/search?from=m_search&keyword=${encodeURIComponent(finalFood.name)}`;
+        
+        document.getElementById('food-result').innerText = (isShake ? "🎲 " : "") + finalFood.name;
+        
+        let nightMsg = "";
+        if (document.body.classList.contains('dark-mode')) {
+            const nightQuotes = ["饱饱的肚子，给我深夜最好的陪伴。", "卡路里在黑夜里不计数。", "吃饱了才好睡大觉。"];
+            extraMsg = "\n\n" + nightQuotes[Math.floor(Math.random() * nightQuotes.length)];
+        }
+        
+        document.getElementById('food-desc').innerText = "“" + finalFood.desc + "”" + extraMsg;
+    }
+
+    // 摇一摇逻辑
+    function initShake() {
+        if (window.DeviceMotionEvent) {
+            window.addEventListener('devicemotion', deviceMotionHandler, false);
+            document.getElementById('shake-text').classList.add('shake-active');
+        }
+    }
+
+    function deviceMotionHandler(eventData) {
+        const acceleration = eventData.accelerationIncludingGravity;
+        const curTime = new Date().getTime();
+        if ((curTime - lastUpdate) > 100) {
+            const diffTime = curTime - lastUpdate;
+            lastUpdate = curTime;
+            const x = acceleration.x;
+            const y = acceleration.y;
+            const z = acceleration.z;
+            const speed = Math.abs(x + y + z - lastX - lastY - lastZ) / diffTime * 10000;
+            if (speed > 2500) { // 摇晃阈值
+                showResult(true);
+            }
+            lastX = x; lastY = y; lastZ = z;
+        }
+    }
+
+    window.onload = applyNightMode;
+</script>
+
+</body>
+</html>
